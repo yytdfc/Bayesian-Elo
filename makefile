@@ -1,6 +1,7 @@
 CXX = g++
 CXX_FLAG = -O3 -std=c++11
 PYBINDSO = bayeselo$(shell python3-config --extension-suffix)
+PYTHON_PACKAGE = $(shell python3 -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")
 SRCS =./BayesElo/version.cpp \
 			./BayesElo/pgnlex.cpp \
 			./BayesElo/str.cpp \
@@ -37,6 +38,11 @@ OBJS = $(SRCS:.cpp=.o)
 
 all: libbayeselo.a libbayeselo.so $(PYBINDSO)
 	
+install: $(PYBINDSO)
+	cp $(PYBINDSO) $(PYTHON_PACKAGE)
+
+uninstall:
+	rm $(PYTHON_PACKAGE)/$(PYBINDSO)
 
 bayeselo: ./BayesElo/elomain.cpp $(OBJS)
 	$(CXX) $(CXX_FLAG) $^ -o $@

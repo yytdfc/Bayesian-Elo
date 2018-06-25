@@ -62,6 +62,13 @@ class CEloRatingCUI : public CConsoleUI // ercui
                 const std::vector<std::string> &vecNameInit,
                 CConsoleUI *pcui = 0,
                 int openmode = OpenModal);
+  void MM(int fThetaW = 0, int fThetaD = 0);
+  void Offset(double offset);
+  void ExactDist(int Player = -1);
+  void Ratings(std::ostream& out = std::cout,
+               int           MinGames = 1,
+               std::string   sFileName = "",
+               int           fFullRank = 0);
 };
 
 #endif

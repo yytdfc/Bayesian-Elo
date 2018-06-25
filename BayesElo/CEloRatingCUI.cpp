@@ -102,7 +102,7 @@ CEloRatingCUI::CEloRatingCUI(const CResultSet &rsInit,
   bt.SetElo(i, 0);
   veloLower[i] = 0;
   veloUpper[i] = 0;
-  vPermutation[i] = i; 
+  vPermutation[i] = i;
  }
 
  MaxNameLength = 0;
@@ -506,7 +506,7 @@ int CEloRatingCUI::ProcessCommand(const char *pszCommand,
    int GroupSize = 100;
    double MaxDiff = 100;
    std::istringstream(pszParameters) >> GroupSize >> MaxDiff;
-   
+
    //
    // Filter out games with a big rating difference
    //
@@ -514,8 +514,8 @@ int CEloRatingCUI::ProcessCommand(const char *pszCommand,
    for (int i = rs.GetGames(); --i >= 0;)
    {
     double Diff = bt.GetElo(rs.GetWhite(i)) - bt.GetElo(rs.GetBlack(i));
-    if (std::fabs(Diff) < MaxDiff) 
-     rsFiltered.Append(rs.GetWhite(i), rs.GetBlack(i), rs.GetResult(i));
+    if (std::fabs(Diff) < MaxDiff)
+      rsFiltered.Append(rs.GetWhite(i), rs.GetBlack(i), rs.GetResult(i));
    }
    std::cerr << rsFiltered.GetGames() << " games left after filtering\n";
 
@@ -566,81 +566,7 @@ int CEloRatingCUI::ProcessCommand(const char *pszCommand,
    int fFullRank = 0;
 
    std::istringstream(pszParameters) >> MinGames >> sFileName >> fFullRank;
-   if (MinGames < 1)
-    MinGames = 1;
-
-   //
-   // Read a list of player names
-   //
-   std::ifstream ifsNames(sFileName.c_str());
-   std::set<std::string> setNames;
-   while (1)
-   {
-    std::string s;
-    ReadLineToString(s, ifsNames);
-    if (ifsNames)
-     setNames.insert(s);
-    else
-     break;
-   }
-
-   std::sort(vPermutation.begin(),
-             vPermutation.end(),
-             CIndirectCompare<double>(bt.GetElo()));
-
-   int Width = MaxNameLength;
-   if (Width < 4)
-    Width = 4;
-
-   CCondensedResults crsNoPrior(rs);
-
-   std::ios::fmtflags f = out.flags();
-   out.setf(std::ios::right, std::ios::adjustfield);
-   out << std::setw(3) << "Rank" << ' ';
-   out.setf(std::ios::left, std::ios::adjustfield);
-   out << std::setw(Width) << "Name" << ' ';
-   out.setf(std::ios::right, std::ios::adjustfield);
-   out << std::setw(5) << "Elo" << ' ';
-   out << std::setw(4) << "  +" << ' ';
-   out << std::setw(4) << "  -" << ' ';
-   out << std::setw(5) << "games" << ' ';
-   out << std::setw(5) << "score" << ' ';
-   out << std::setw(5) << "oppo." << ' ';
-   out << std::setw(5) << "draws" << ' ';
-   out << '\n';
-
-   const double *pElo = bt.GetElo();
-   for (int i = 0, Counter = 0; i < crs.GetPlayers(); i++)
-   {
-    int j = vPermutation[i];
-    float Games = crsNoPrior.CountGames(j);
-    if (Games >= MinGames &&
-        (setNames.size() == 0 || setNames.find(vecName[j]) != setNames.end()))
-    {
-     Counter++;
-     double Score = double(crsNoPrior.Score(j)) / 2;
-     out.setf(std::ios::right, std::ios::adjustfield);
-     if (fFullRank)
-      out << std::setw(4) << i + 1 << ' ';
-     else
-      out << std::setw(4) << Counter << ' ';
-     out.setf(std::ios::left, std::ios::adjustfield);
-     out << std::setw(Width) << vecName[j] << ' ';
-     out.setf(std::ios::right, std::ios::adjustfield);
-     out << std::setw(5) << RoundDouble(EloScale * bt.GetElo(j) + eloOffset) << ' ';
-     out << std::setw(4) << RoundDouble(EloScale * veloUpper[j]) << ' ';
-     out << std::setw(4) << RoundDouble(EloScale * veloLower[j]) << ' ';
-     out << std::setw(5) << Games << ' ';
-     out << std::setw(4) << RoundDouble(100 * Score / Games) << "% ";
-     out << std::setw(5) <<
-      RoundDouble(EloScale * crs.AverageOpponent(j, pElo) + eloOffset) << ' ';
-     out << std::setw(4) << RoundDouble(100 * crsNoPrior.CountDraws(j) /
-                                        double(Games)) << "% ";
-     out << '\n';
-    }
-   }
-
-   out.flags(f);
+   Ratings(out, MinGames, sFileName, fFullRank);
   }
   break;
 
@@ -761,14 +687,7 @@ int CEloRatingCUI::ProcessCommand(const char *pszCommand,
    int fThetaD = 0;
    std::istringstream(pszParameters) >> fThetaW >> fThetaD;
    CClockTimer timer;
-   bt.MinorizationMaximization(fThetaW, fThetaD);
-   out << timer.GetInterval() << '\n';
-   ComputeVariance();
-   {
-    double x = std::pow(10.0, -bt.GetDrawElo() / 400);
-    EloScale = x * 4.0 / ((1 + x) * (1 + x));
-   }
-   fLOSComputed = 0;
+   MM(fThetaW, fThetaD);
   }
   break;
 
@@ -838,24 +757,7 @@ int CEloRatingCUI::ProcessCommand(const char *pszCommand,
    std::istringstream(pszParameters) >> Player;
 
    CClockTimer timer;
-   CCDistribution cdist(Resolution, eloMin, eloMax);
-
-   for (int i = crs.GetPlayers(); --i >= 0;)
-   {
-    if (i % 10 == 0)
-    {
-     out << i << " left    \r";
-     out.flush();
-    }
-    bt.GetPlayerDist(i, cdist);
-    veloLower[i] = bt.GetElo(i) - cdist.GetLowerValue(Confidence);
-    veloUpper[i] = cdist.GetUpperValue(Confidence) - bt.GetElo(i);
-    if (i == Player)
-    {
-     CCDistributionCUI cdcui(cdist, this);
-     cdcui.MainLoop(in, out);
-    }
-   }
+   ExactDist(Player);
 
    out << timer.GetInterval() << "              \n";
   }
@@ -1043,4 +945,114 @@ int CEloRatingCUI::ProcessCommand(const char *pszCommand,
  }
 
  return PC_Continue;
+}
+
+void CEloRatingCUI::MM(int fThetaW, int fThetaD){
+   bt.MinorizationMaximization(fThetaW, fThetaD);
+   ComputeVariance();
+   {
+    double x = std::pow(10.0, -bt.GetDrawElo() / 400);
+    EloScale = x * 4.0 / ((1 + x) * (1 + x));
+   }
+   fLOSComputed = 0;
+}
+void CEloRatingCUI::Offset(double offset){
+   eloOffset = offset;
+}
+void CEloRatingCUI::ExactDist(int Player){
+   CCDistribution cdist(Resolution, eloMin, eloMax);
+   for (int i = crs.GetPlayers(); --i >= 0;)
+   {
+    if (i % 10 == 0)
+    {
+    //  out << i << " left    \r";
+    //  out.flush();
+    }
+    bt.GetPlayerDist(i, cdist);
+    veloLower[i] = bt.GetElo(i) - cdist.GetLowerValue(Confidence);
+    veloUpper[i] = cdist.GetUpperValue(Confidence) - bt.GetElo(i);
+    // if (i == Player)
+    // {
+    //  CCDistributionCUI cdcui(cdist, this);
+    //  cdcui.MainLoop(in, out);
+    // }
+   }
+
+}
+void CEloRatingCUI::Ratings(std::ostream &out, int MinGames, std::string sFileName, int fFullRank){
+   if (MinGames < 1)
+    MinGames = 1;
+
+   //
+   // Read a list of player names
+   //
+   std::ifstream ifsNames(sFileName.c_str());
+   std::set<std::string> setNames;
+   while (1)
+   {
+    std::string s;
+    ReadLineToString(s, ifsNames);
+    if (ifsNames)
+     setNames.insert(s);
+    else
+     break;
+   }
+
+   std::sort(vPermutation.begin(),
+             vPermutation.end(),
+             CIndirectCompare<double>(bt.GetElo()));
+
+   int Width = MaxNameLength;
+   if (Width < 4)
+    Width = 4;
+
+   CCondensedResults crsNoPrior(rs);
+
+   std::ios::fmtflags f = out.flags();
+   out.setf(std::ios::right, std::ios::adjustfield);
+   out << std::setw(3) << "Rank" << ' ';
+   out.setf(std::ios::left, std::ios::adjustfield);
+   out << std::setw(Width) << "Name" << ' ';
+   out.setf(std::ios::right, std::ios::adjustfield);
+   out << std::setw(5) << "Elo" << ' ';
+   out << std::setw(4) << "  +" << ' ';
+   out << std::setw(4) << "  -" << ' ';
+   out << std::setw(5) << "games" << ' ';
+   out << std::setw(5) << "score" << ' ';
+   out << std::setw(5) << "oppo." << ' ';
+   out << std::setw(5) << "draws" << ' ';
+   out << '\n';
+
+   const double *pElo = bt.GetElo();
+   for (int i = 0, Counter = 0; i < crs.GetPlayers(); i++)
+   {
+    int j = vPermutation[i];
+    float Games = crsNoPrior.CountGames(j);
+    if (Games >= MinGames &&
+        (setNames.size() == 0 || setNames.find(vecName[j]) != setNames.end()))
+    {
+     Counter++;
+     double Score = double(crsNoPrior.Score(j)) / 2;
+     out.setf(std::ios::right, std::ios::adjustfield);
+     if (fFullRank)
+      out << std::setw(4) << i + 1 << ' ';
+     else
+      out << std::setw(4) << Counter << ' ';
+     out.setf(std::ios::left, std::ios::adjustfield);
+     out << std::setw(Width) << vecName[j] << ' ';
+     out.setf(std::ios::right, std::ios::adjustfield);
+     out << std::setw(5) << RoundDouble(EloScale * bt.GetElo(j) + eloOffset) << ' ';
+     out << std::setw(4) << RoundDouble(EloScale * veloUpper[j]) << ' ';
+     out << std::setw(4) << RoundDouble(EloScale * veloLower[j]) << ' ';
+     out << std::setw(5) << Games << ' ';
+     out << std::setw(4) << RoundDouble(100 * Score / Games) << "% ";
+     out << std::setw(5) <<
+      RoundDouble(EloScale * crs.AverageOpponent(j, pElo) + eloOffset) << ' ';
+     out << std::setw(4) << RoundDouble(100 * crsNoPrior.CountDraws(j) /
+                                        double(Games)) << "% ";
+     out << '\n';
+    }
+   }
+
+   out.flags(f);
 }

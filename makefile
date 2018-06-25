@@ -49,7 +49,7 @@ test: test-cc $(PYBINDSO)
 	python3 ./test.py
 
 test-cc: test.cc libbayeselo.so
-	$(CXX) $(CXX_FLAG) $^ -I. -o test-cc -lbayeselo
+	$(CXX) $(CXX_FLAG) $^ -I. -L. -o test-cc -lbayeselo
 
 libbayeselo.so: $(SRCS)
 	$(CXX) $(CXX_FLAG) $^ -fPIC -shared -o $@
